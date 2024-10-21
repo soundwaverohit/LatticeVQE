@@ -90,51 +90,55 @@ mapper = JordanWignerMapper()
 
 # Map to qubit operator
 qubit_hamiltonian = mapper.map(fermionic_hamiltonian)
+import pickle
 
+with open("qubit_hamiltonian.pkl", "wb") as f:
+    pickle.dump(qubit_hamiltonian.to_list(), f)
+print(qubit_hamiltonian)
 # **Custom Ansatz Circuit**
 # Define the number of qubits
 num_qubits = num_sites * num_colors  # 3 colors per site
 
-# Create the quantum circuit (ansatz)
-ansatz = QuantumCircuit(num_qubits)
+# # Create the quantum circuit (ansatz)
+# ansatz = QuantumCircuit(num_qubits)
 
-# Create parameters for the ansatz
-parameters = []
-for i in range(num_qubits):
-    theta = Parameter(f"theta_{i}")
-    parameters.append(theta)
-    ansatz.ry(theta, i)
+# # Create parameters for the ansatz
+# parameters = []
+# for i in range(num_qubits):
+#     theta = Parameter(f"theta_{i}")
+#     parameters.append(theta)
+#     ansatz.ry(theta, i)
 
-# Add entangling gates
-for i in range(0, num_qubits - 1, 2):
-    ansatz.cx(i, i + 1)
-for i in range(1, num_qubits - 1, 2):
-    ansatz.cx(i, i + 1)
-# Optionally, add entanglement between the last and first qubits
-# ansatz.cx(num_qubits - 1, 0)
+# # Add entangling gates
+# for i in range(0, num_qubits - 1, 2):
+#     ansatz.cx(i, i + 1)
+# for i in range(1, num_qubits - 1, 2):
+#     ansatz.cx(i, i + 1)
+# # Optionally, add entanglement between the last and first qubits
+# # ansatz.cx(num_qubits - 1, 0)
 
-# **Print the custom ansatz circuit**
-print("Custom ansatz circuit:")
-print(ansatz.draw())
+# # **Print the custom ansatz circuit**
+# print("Custom ansatz circuit:")
+# print(ansatz.draw())
 
-print("Qubit count: ", num_qubits)
+# print("Qubit count: ", num_qubits)
 
-# Optimizer
-optimizer = COBYLA(maxiter=1000)
+# # Optimizer
+# optimizer = COBYLA(maxiter=1000)
 
-# Create an Estimator
-estimator = Estimator()
+# # Create an Estimator
+# estimator = Estimator()
 
-# Create the VQE instance with the custom ansatz
-vqe = VQE(estimator, ansatz, optimizer)
+# # Create the VQE instance with the custom ansatz
+# vqe = VQE(estimator, ansatz, optimizer)
 
-# Compute the ground state energy (without plaquette terms for now)
-result = vqe.compute_minimum_eigenvalue(qubit_hamiltonian)
+# # Compute the ground state energy (without plaquette terms for now)
+# result = vqe.compute_minimum_eigenvalue(qubit_hamiltonian)
 
-# Total energy includes plaquette energy (calculated separately)
-total_energy = result.eigenvalue.real + plaquette_energy
+# # Total energy includes plaquette energy (calculated separately)
+# total_energy = result.eigenvalue.real + plaquette_energy
 
-# Print the results
-print("Ground state energy without plaquette:", result.eigenvalue.real)
-print("Plaquette energy contribution:", plaquette_energy)
-print("Total ground state energy:", total_energy)
+# # Print the results
+# print("Ground state energy without plaquette:", result.eigenvalue.real)
+# print("Plaquette energy contribution:", plaquette_energy)
+# print("Total ground state energy:", total_energy)

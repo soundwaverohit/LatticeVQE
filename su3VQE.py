@@ -1,14 +1,15 @@
+import random
+
+import numpy as np
 from qiskit import QuantumCircuit
-from qiskit_aer import AerSimulator
-from qiskit.circuit import QuantumCircuit, Parameter
-from qiskit_nature.second_q.mappers import JordanWignerMapper
-from qiskit_nature.second_q.operators import FermionicOp
+from qiskit.circuit import Parameter, QuantumCircuit
 from qiskit.primitives import Estimator
+from qiskit_aer import AerSimulator
 from qiskit_algorithms.minimum_eigensolvers import VQE
 from qiskit_algorithms.optimizers import COBYLA
-import numpy as np
+from qiskit_nature.second_q.mappers import JordanWignerMapper
+from qiskit_nature.second_q.operators import FermionicOp
 from scipy.linalg import expm
-import random
 
 # Parameters
 g = 2.0  # Coupling constant
@@ -20,7 +21,9 @@ num_sites = lattice_size * lattice_size  # Total number of lattice sites
 num_colors = 3  # SU(3) has 3 color indices
 
 su3_generators = [
-    np.array([[0, 1, 0], [0, 0, 0], [0, 0, 0]]),  # Gell-Mann matrices (SU(3) generators)
+    np.array(
+        [[0, 1, 0], [0, 0, 0], [0, 0, 0]]
+    ),  # Gell-Mann matrices (SU(3) generators)
     np.array([[0, 0, 1], [0, 0, 0], [0, 0, 0]]),
     np.array([[0, 0, 0], [1, 0, 0], [0, 0, 0]]),
     np.array([[0, 0, 0], [0, 0, 1], [0, 0, 0]]),
@@ -31,11 +34,16 @@ su3_generators = [
 ]  # SU(3) Gell-Mann matrices
 
 # Initialize gauge field as random SU(3) matrices for each link in the 2D lattice
-gauge_field = [expm(1j * random.random() * su3_generators[random.randint(0, 7)]) for _ in range(2 * num_sites)]  # Links in 2D
+gauge_field = [
+    expm(1j * random.random() * su3_generators[random.randint(0, 7)])
+    for _ in range(2 * num_sites)
+]  # Links in 2D
+
 
 # Helper function to flatten site and color indices into a single index
 def flatten_index(site, color, num_colors):
     return site * num_colors + color
+
 
 # Hopping terms for SU(3) (fermionic hopping terms)
 fermionic_terms = {}
@@ -44,7 +52,9 @@ for n in range(num_sites - 1):
     for alpha in range(num_colors):  # Sum over color indices (alpha = 1, 2, 3)
         flattened_idx_1 = flatten_index(n, alpha, num_colors)
         flattened_idx_2 = flatten_index(n + 1, alpha, num_colors)
-        fermionic_terms[f"+_{flattened_idx_1} -_{flattened_idx_2}"] = -t * np.trace(U @ U.T.conj()) / 2
+        fermionic_terms[f"+_{flattened_idx_1} -_{flattened_idx_2}"] = (
+            -t * np.trace(U @ U.T.conj()) / 2
+        )
 
 # On-site mass terms (fermionic creation/annihilation for each color)
 for n in range(num_sites):
@@ -58,8 +68,12 @@ for i in range(lattice_size - 1):
     for j in range(lattice_size - 1):
         # Find the 4 links around a plaquette (Uij, Ujk, Ukl, Uli)
         U_ij = gauge_field[i * lattice_size + j]  # Link from site (i, j) to (i, j+1)
-        U_jk = gauge_field[(i + 1) * lattice_size + j]  # Link from (i, j+1) to (i+1, j+1)
-        U_kl = gauge_field[(i + 1) * lattice_size + j + 1]  # Link from (i+1, j+1) to (i+1, j)
+        U_jk = gauge_field[
+            (i + 1) * lattice_size + j
+        ]  # Link from (i, j+1) to (i+1, j+1)
+        U_kl = gauge_field[
+            (i + 1) * lattice_size + j + 1
+        ]  # Link from (i+1, j+1) to (i+1, j)
         U_li = gauge_field[i * lattice_size + j + 1]  # Link from (i+1, j) to (i, j)
 
         # Plaquette term for this square
@@ -67,7 +81,9 @@ for i in range(lattice_size - 1):
         plaquette_energy += g**2 * plaquette / 2
 
 # Create the FermionicOp with the dictionary of fermionic hopping and mass terms
-fermionic_hamiltonian = FermionicOp(fermionic_terms, num_spin_orbitals=num_sites * num_colors)
+fermionic_hamiltonian = FermionicOp(
+    fermionic_terms, num_spin_orbitals=num_sites * num_colors
+)
 
 # **Mapping to Qubits**
 mapper = JordanWignerMapper()
@@ -85,12 +101,14 @@ ansatz = QuantumCircuit(num_qubits)
 # Create parameters for the ansatz
 parameters = []
 for i in range(num_qubits):
-    theta = Parameter(f'theta_{i}')
+    theta = Parameter(f"theta_{i}")
     parameters.append(theta)
     ansatz.ry(theta, i)
 
 # Add entangling gates
-for i in range(num_qubits - 1):
+for i in range(0, num_qubits - 1, 2):
+    ansatz.cx(i, i + 1)
+for i in range(1, num_qubits - 1, 2):
     ansatz.cx(i, i + 1)
 # Optionally, add entanglement between the last and first qubits
 # ansatz.cx(num_qubits - 1, 0)

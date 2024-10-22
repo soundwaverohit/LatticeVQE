@@ -62,9 +62,9 @@ class QVQEModel(tq.QuantumModule):
         for k in range(self.n_blocks):
             self.u3_layers[k](qdev)
             for i in range(0, self.n_wires - 1, 2):
-                tq.CX(qdev, wires=[i, i + 1])
+                tq.C3X(qdev, wires=[i, i + 1])
             for i in range(1, self.n_wires - 1, 2):
-                tq.CX(qdev, wires=[i, i + 1])
+                tq.C3X(qdev, wires=[i, i + 1])
 
         expval = 0
         for hamil in self.hamil_info["hamil_list"]:

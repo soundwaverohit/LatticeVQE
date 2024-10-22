@@ -135,7 +135,7 @@ def main():
     parser.add_argument(
         "--hamil_filename",
         type=str,
-        default="examples/vqe/h2.txt",
+        default="hamiltonian.txt",
         help="number of training epochs",
     )
 

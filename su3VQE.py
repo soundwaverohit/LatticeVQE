@@ -15,7 +15,7 @@ g = 2.0  # Coupling constant
 t = 1.0  # Hopping term
 m = 0.5  # Fermion mass
 lattice_dim = 2  # 2D lattice
-lattice_size = 3  # 3x3 lattice for simplicity
+lattice_size = 2  # 3x3 lattice for simplicity
 num_sites = lattice_size * lattice_size  # Total number of lattice sites
 num_colors = 3  # SU(3) has 3 color indices
 

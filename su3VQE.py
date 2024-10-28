@@ -94,45 +94,62 @@ print(qubit_hamiltonian)
 num_qubits = num_sites * num_colors  # 3 colors per site
 
 # # Create the quantum circuit (ansatz)
-# ansatz = QuantumCircuit(num_qubits)
+ansatz = QuantumCircuit(num_qubits)
 
 # # Create parameters for the ansatz
-# parameters = []
-# for i in range(num_qubits):
-#     theta = Parameter(f"theta_{i}")
-#     parameters.append(theta)
-#     ansatz.ry(theta, i)
+parameters = []
+for i in range(num_qubits):
+    theta = Parameter(f"theta_{i}")
+    parameters.append(theta)
+    ansatz.ry(theta, i)
 
 # # Add entangling gates
-# for i in range(0, num_qubits - 1, 2):
-#     ansatz.cx(i, i + 1)
-# for i in range(1, num_qubits - 1, 2):
-#     ansatz.cx(i, i + 1)
+for i in range(0, num_qubits - 1, 2):
+     ansatz.cx(i, i + 1)
+
+for i in range(1, num_qubits - 1, 2):
+     ansatz.cx(i, i + 1)
 # # Optionally, add entanglement between the last and first qubits
-# # ansatz.cx(num_qubits - 1, 0)
+     ansatz.cx(num_qubits - 1, 0)
 
 # # **Print the custom ansatz circuit**
-# print("Custom ansatz circuit:")
-# print(ansatz.draw())
+print("Custom ansatz circuit:")
+print(ansatz.draw())
 
-# print("Qubit count: ", num_qubits)
+print("Qubit count: ", num_qubits)
 
 # # Optimizer
-# optimizer = COBYLA(maxiter=1000)
+optimizer = COBYLA(maxiter=1000)
 
 # # Create an Estimator
-# estimator = Estimator()
+estimator = Estimator()
 
 # # Create the VQE instance with the custom ansatz
-# vqe = VQE(estimator, ansatz, optimizer)
+vqe = VQE(estimator, ansatz, optimizer)
 
 # # Compute the ground state energy (without plaquette terms for now)
-# result = vqe.compute_minimum_eigenvalue(qubit_hamiltonian)
+result = vqe.compute_minimum_eigenvalue(qubit_hamiltonian)
 
 # # Total energy includes plaquette energy (calculated separately)
-# total_energy = result.eigenvalue.real + plaquette_energy
+total_energy = result.eigenvalue.real + plaquette_energy
 
 # # Print the results
-# print("Ground state energy without plaquette:", result.eigenvalue.real)
-# print("Plaquette energy contribution:", plaquette_energy)
-# print("Total ground state energy:", total_energy)
+print("Ground state energy without plaquette:", result.eigenvalue.real)
+print("Plaquette energy contribution:", plaquette_energy)
+print("Total ground state energy:", total_energy)
+
+
+from qiskit.quantum_info import SparsePauliOp
+
+# Step 1: Map Fermionic Hamiltonian to Qubit Operator
+jw_mapper = JordanWignerMapper()
+qubit_hamiltonian = jw_mapper.map(fermionic_hamiltonian)
+
+# Step 2: Convert Qubit Operator to Sparse Matrix directly
+sparse_matrix = qubit_hamiltonian.to_matrix(sparse=True)  # Directly convert to matrix
+
+# Step 3: Use a classical sparse eigenvalue solver to find the minimum eigenvalue
+from scipy.sparse.linalg import eigsh
+min_eigenvalue, _ = eigsh(sparse_matrix, k=1, which='SA')  # 'SA' finds smallest algebraic eigenvalue
+
+print("Minimum Eigenvalue:", min_eigenvalue[0])

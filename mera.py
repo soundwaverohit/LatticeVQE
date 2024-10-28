@@ -90,7 +90,7 @@ lowest_energy = batched_train(idx, batch=5, maxiter=2000, lr=0.007)
 # DMRG comparison
 try:
     # Option A: Try importing from quimb.tensor.tensor_gen
-    from quimb.tensor.tensor_gen import MPO_ham_ising
+    #from quimb.tensor.tensor_gen import MPO_ham_ising
     h = MPO_ham_ising(n, j=4.0, bx=2.0, S=0.5, cyclic=False)
 except ImportError:
     try:

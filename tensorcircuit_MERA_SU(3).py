@@ -25,6 +25,10 @@ tc.set_dtype("complex128")
 from qiskit_nature.second_q.mappers import JordanWignerMapper
 from qiskit_nature.second_q.operators import FermionicOp
 
+# Fix the random seed for reproducibility
+random.seed(42)
+np.random.seed(42)
+
 # Define your Hamiltonian parameters and generate the Hamiltonian
 g = 2.0
 t = 1.0
@@ -173,7 +177,10 @@ def create_NN_MERA(n, d, NN_shape, stddev):
     )(input)
     x = tf.keras.layers.Dropout(0.05)(x)
 
-    _, idx = MERA({"params": np.zeros(3000)}, n, d, energy_flag=False)
+    # Get the number of parameters required for the MERA circuit
+    dummy_params = np.zeros(3000)
+    _, idx = MERA({"params": dummy_params}, n, d, energy_flag=False)
+
     params = tf.keras.layers.Dense(
         units=idx,
         kernel_initializer=tf.keras.initializers.RandomNormal(stddev=stddev),
@@ -209,19 +216,43 @@ def train(n, d, NN_shape, maxiter=10000, lr=0.005, stddev=1.0):
             print("epoch", i, ":", total_e.numpy())
 
     m.save_weights("NN-VQE.weights.h5")
-    return energies  # Return the list of energies
+    return energies, m  # Return the list of energies and the trained model
 
 # Set the number of qubits
 n = num_sites * num_colors
 d = 2
-NN_shape = 20
-maxiter = 2500
+NN_shape = 30
+maxiter = 1000  # Reduced for quicker execution
 lr = 0.009
 stddev = 0.1
 
 # Run the training and record energies
 with tf.device("/cpu:0"):
-    energies = train(n, d, NN_shape=NN_shape, maxiter=maxiter, lr=lr, stddev=stddev)
+    energies, m = train(n, d, NN_shape=NN_shape, maxiter=maxiter, lr=lr, stddev=stddev)
+
+
+
+# --- Code to print and save the quantum circuit ---
+
+
+# Extract the parameters from the trained model
+params_model = tf.keras.Model(inputs=m.input, outputs=m.layers[-2].output)
+input_val = np.array([[0.0]])
+params = params_model.predict(input_val)[0]
+
+# Build the circuit with the trained parameters
+c, idx = MERA({"params": params}, n, d, energy_flag=False)
+
+# Convert the TensorCircuit circuit to a Qiskit QuantumCircuit
+qiskit_circuit = c.to_qiskit()
+
+# Draw and save the circuit using Qiskit
+from qiskit.visualization import circuit_drawer
+
+# Save the circuit diagram as a PNG image
+circuit_drawer(qiskit_circuit, output='mpl', filename='quantum_circuit.png')
+
+print("Quantum circuit saved as 'quantum_circuit.png'.")
 
 # Plot the energy convergence
 plt.plot(range(len(energies)), energies)
@@ -229,3 +260,4 @@ plt.xlabel("Epoch")
 plt.ylabel("Energy")
 plt.title("Energy Convergence During Training")
 plt.show()
+

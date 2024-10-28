@@ -28,7 +28,14 @@ The plaquette term in the Hamiltonian represents the magnetic interaction betwee
 ### Total Hamiltonian
 The complete Hamiltonian is the sum of the hopping and mass terms:
 ```math
-H = H_{\text{hop}} + H_{\text{mass}}
+H = H_{\text{hop}} + H_{\text{mass}} + H_{\text{plaq}} 
 ```
 
-This Hamiltonian structure captures both the gauge field's influence on particle motion (via hopping terms) and the individual particle mass for each color on each site.
+The complete Hamiltonian is the sum of the hopping, mass, and plaquette terms:
+  1. Hopping term: Describes the movement of fermions between neighboring lattice sites. This term is influenced by the gauge field, creating a coupling between fermionic hopping and the SU(3) color field on the lattice. It mimics the effect of
+     the gauge field on particles (analogous to how charged particles move under the influence of an electromagnetic field).
+  2. Mass Term: Represents the on-site mass energy of the fermions. This term contributes a mass energy cost for each fermion present on a lattice site, giving the fermions a "rest energy" similar to mass in classical mechanics.
+  3. Plaquetter Term: Represents the magnetic field-like interactions on the lattice. It models the local gauge field interactions by summing the flux through each plaquette, capturing the non-Abelian gauge field's effect in closed loops. This.
+     term is key for simulating the confinement properties seen in non-Abelian gauge theories like quantum chromodynamics (QCD).
+
+

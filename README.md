@@ -1,41 +1,27 @@
-# Hamiltonian Description
-The Hamiltonian we are using models a lattice gauge theory with SU(3) color degrees of freedom and fermionic hopping terms. The Hamiltonian has two main components: hopping terms and on-site mass terms.
+### Code Overview and Purpose
 
-### Hopping Terms
-The hopping terms describe fermions moving between neighboring lattice sites, mediated by an SU(3) gauge field:
-```math
-H_{\text{hop}} = -t \sum_{\langle i, j \rangle} \sum_{\alpha=1}^{3} \frac{\text{Re} ( \text{Tr} ( U_{i,j} U_{i,j}^{\dagger} ))}{2} ( c_{i,\alpha}^{\dagger} c_{j,\alpha} + c_{j,\alpha}^{\dagger} c_{i,\alpha} )
-```
+This code simulates a lattice gauge theory with SU(3) symmetry, targeting a 2D lattice model for simplicity. The goal is to study the quantum properties of a system with fermions interacting under an SU(3) gauge field, which mimics the interactions of particles in quantum chromodynamics. The code does this by:
 
-where \( t \) is the hopping strength, \( \langle i, j \rangle \) denotes neighboring sites, and \( U_{i,j} \) is an SU(3) matrix representing the gauge field on the link between sites \( i \) and \( j \). Here, \( c_{i, \alpha}^{\dagger} \) and \( c_{j, \alpha} \) are the fermionic creation and annihilation operators at site \( i \) and color \( \alpha \).
+1. **Constructing the Hamiltonian**: The Hamiltonian is built from the hopping, mass, and plaquette terms, each representing different types of interactions within the lattice gauge theory.
 
-### Mass Terms
-The on-site mass term describes the energy cost associated with occupying a site:
-```math
-H_{\text{mass}} = m \sum_{i=1}^{N} \sum_{\alpha=1}^{3} c_{i,\alpha}^{\dagger} c_{i,\alpha}
-```
+2. **Mapping the Hamiltonian to Qubits**: The fermionic Hamiltonian is mapped to a qubit operator using the Jordan-Wigner transformation, making it suitable for simulation on a quantum computer.
 
+3. **Creating a Custom Ansatz Circuit**: A parameterized quantum circuit (ansatz) is designed for use in the Variational Quantum Eigensolver (VQE), an algorithm to approximate the ground state of the Hamiltonian.
 
-where \( m \) is the fermion mass, \( N \) is the total number of sites, and the sum over \( \alpha \) accounts for the three colors in SU(3).
+4. **Running the VQE Algorithm**: The VQE algorithm optimizes the parameters of the ansatz circuit to minimize the expectation value of the Hamiltonian, approximating the minimum (or ground state) energy of the system.
 
-### Plaquette Terms: 
-The plaquette terms describes the 
-```math
-H_{\text{plaq}} = \frac{g^2}{2} \sum_{\square} \text{Re} \, \text{Tr} \left( U_{ij} U_{jk} U_{kl} U_{li} \right)
-```
-The plaquette term in the Hamiltonian represents the magnetic interaction between the gauge fields on a lattice, specifically in lattice gauge theory. It encapsulates the non-Abelian flux through a square (plaquette) of the lattice, which corresponds to the interaction between gauge fields in a closed loop.
+5. **Including Plaquette Energy**: The code calculates the plaquette energy separately and adds it to the ground state energy obtained from the VQE.
 
-### Total Hamiltonian
-The complete Hamiltonian is the sum of the hopping and mass terms:
-```math
-H = H_{\text{hop}} + H_{\text{mass}} + H_{\text{plaq}} 
-```
+---
 
-The complete Hamiltonian is the sum of the hopping, mass, and plaquette terms:
-  1. Hopping term: Describes the movement of fermions between neighboring lattice sites. This term is influenced by the gauge field, creating a coupling between fermionic hopping and the SU(3) color field on the lattice. It mimics the effect of
-     the gauge field on particles (analogous to how charged particles move under the influence of an electromagnetic field).
-  2. Mass Term: Represents the on-site mass energy of the fermions. This term contributes a mass energy cost for each fermion present on a lattice site, giving the fermions a "rest energy" similar to mass in classical mechanics.
-  3. Plaquetter Term: Represents the magnetic field-like interactions on the lattice. It models the local gauge field interactions by summing the flux through each plaquette, capturing the non-Abelian gauge field's effect in closed loops. This.
-     term is key for simulating the confinement properties seen in non-Abelian gauge theories like quantum chromodynamics (QCD).
+### Significance of the Minimum Eigenvalue
 
+In quantum mechanics, the **minimum eigenvalue of the Hamiltonian** represents the **ground state energy** of the system. This value is crucial because:
 
+- It corresponds to the **lowest energy state** of the system, which is often the most stable state.
+- Understanding the ground state properties provides insights into the **quantum phase** of the system, especially for complex systems like lattice gauge theories.
+- For lattice gauge theories, the ground state energy also helps in studying **confinement** and **interaction dynamics** of particles under gauge fields, important for simulating and understanding systems like QCD.
+
+In this context, finding the minimum eigenvalue is a primary objective because it reveals how the system behaves at its most fundamental level under the SU(3) gauge field interactions, which could provide insights into the nature of strong interactions in particle physics. 
+
+This simulation process, specifically using VQE on quantum computers, is a step towards scalable quantum simulations of complex gauge theories, potentially enabling future studies of particle interactions beyond classical computational limits.

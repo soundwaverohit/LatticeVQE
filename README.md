@@ -4,7 +4,7 @@ The Hamiltonian we are using models a lattice gauge theory with SU(3) color degr
 ### Hopping Terms
 The hopping terms describe fermions moving between neighboring lattice sites, mediated by an SU(3) gauge field:
 ```math
-H_{\text{hop}} = -t \sum_{\langle i, j \rangle} \sum_{\alpha=1}^{3} \frac{\operatorname{Re} \left( \operatorname{Tr} \left( U_{i,j} U_{i,j}^{\dagger} \right) \right)}{2} \left( c_{i,\alpha}^{\dagger} c_{j,\alpha} + c_{j,\alpha}^{\dagger} c_{i,\alpha} \right)
+H_{\text{hop}} = -t \sum_{\langle i, j \rangle} \sum_{\alpha=1}^{3} \frac{\{Re} \left( \{Tr} \left( U_{i,j} U_{i,j}^{\dagger} \right) \right)}{2} \left( c_{i,\alpha}^{\dagger} c_{j,\alpha} + c_{j,\alpha}^{\dagger} c_{i,\alpha} \right)
 ```
 
 where \( t \) is the hopping strength, \( \langle i, j \rangle \) denotes neighboring sites, and \( U_{i,j} \) is an SU(3) matrix representing the gauge field on the link between sites \( i \) and \( j \). Here, \( c_{i, \alpha}^{\dagger} \) and \( c_{j, \alpha} \) are the fermionic creation and annihilation operators at site \( i \) and color \( \alpha \).

@@ -17,7 +17,7 @@ H_{\text{mass}} = m \sum_{i=1}^{N} \sum_{\alpha=1}^{3} c_{i,\alpha}^{\dagger} c_
 ```
 
 
-where \( m \) is the fermion mass, \( N \) is the total number of sites, and the sum over \( \alpha \) accounts for the three colors in SU(3).
+where \( m \) is the fermion mass, \( N \) is the total number of sites, and the sum over $\( \alpha \)$ accounts for the three colors in SU(3).
 
 ### Plaquette Terms: 
 The plaquette terms describes the 

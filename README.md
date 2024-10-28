@@ -18,6 +18,13 @@ H_{\text{mass}} = m \sum_{i=1}^{N} \sum_{\alpha=1}^{3} c_{i,\alpha}^{\dagger} c_
 
 where \( m \) is the fermion mass, \( N \) is the total number of sites, and the sum over \( \alpha \) accounts for the three colors in SU(3).
 
+### Plaquette Terms: 
+The plaquette terms describes the 
+```math
+H_{\text{plaq}} = \frac{g^2}{2} \sum_{\square} \text{Re} \, \text{Tr} \left( U_{ij} U_{jk} U_{kl} U_{li} \right)
+```
+
+
 ### Total Hamiltonian
 The complete Hamiltonian is the sum of the hopping and mass terms:
 \[

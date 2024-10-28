@@ -222,7 +222,7 @@ def train(n, d, NN_shape, maxiter=10000, lr=0.005, stddev=1.0):
 n = num_sites * num_colors
 d = 2
 NN_shape = 30
-maxiter = 1000  # Reduced for quicker execution
+maxiter = 1000  
 lr = 0.009
 stddev = 0.1
 

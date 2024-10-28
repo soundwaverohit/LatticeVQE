@@ -129,12 +129,12 @@ def main():
         "--steps_per_epoch", type=int, default=10, help="number of training steps per epoch"
     )
     parser.add_argument(
-        "--epochs", type=int, default=100, help="number of training epochs"
+        "--epochs", type=int, default=10, help="number of training epochs"
     )
     parser.add_argument(
         "--hamil_filename",
         type=str,
-        default="hamiltonian.txt",
+        default="/Users/rohitganti/Desktop/LatticeVQE/pennylane_implementations/hamiltonian.txt",
         help="filename of the Hamiltonian",
     )
 

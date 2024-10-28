@@ -12,9 +12,7 @@ where \( t \) is the hopping strength, \( \langle i, j \rangle \) denotes neighb
 ### Mass Terms
 The on-site mass term describes the energy cost associated with occupying a site:
 ```math
-\[
 H_{\text{mass}} = m \sum_{i=1}^{N} \sum_{\alpha=1}^{3} c_{i,\alpha}^{\dagger} c_{i,\alpha}
-\]
 ```
 
 

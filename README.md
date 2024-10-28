@@ -1,6 +1,9 @@
 # Hamiltonian Description
 The Hamiltonian we are using models a lattice gauge theory with SU(3) color degrees of freedom and fermionic hopping terms. The Hamiltonian has two main components: hopping terms and on-site mass terms.
 
+This sentence uses `$` delimiters to show math inline:  $\sqrt{3x-1}+(1+x)^2$
+
+
 ### Hopping Terms
 The hopping terms describe fermions moving between neighboring lattice sites, mediated by an SU(3) gauge field:
 $\[

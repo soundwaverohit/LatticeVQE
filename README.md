@@ -6,13 +6,15 @@ The hopping terms describe fermions moving between neighboring lattice sites, me
 $\[
 H_{\text{hop}} = -t \sum_{\langle i, j \rangle} \sum_{\alpha=1}^{3} \frac{\operatorname{Re} \operatorname{Tr} \left( U_{i,j} U_{i,j}^{\dagger} \right)}{2} \left( c_{i,\alpha}^{\dagger} c_{j,\alpha} + c_{j,\alpha}^{\dagger} c_{i,\alpha} \right)
 \]$
+
 where \( t \) is the hopping strength, \( \langle i, j \rangle \) denotes neighboring sites, and \( U_{i,j} \) is an SU(3) matrix representing the gauge field on the link between sites \( i \) and \( j \). Here, \( c_{i, \alpha}^{\dagger} \) and \( c_{j, \alpha} \) are the fermionic creation and annihilation operators at site \( i \) and color \( \alpha \).
 
 ### Mass Terms
 The on-site mass term describes the energy cost associated with occupying a site:
-\[
+
+$ \[
 H_{\text{mass}} = m \sum_{i=1}^{N} \sum_{\alpha=1}^{3} c_{i,\alpha}^{\dagger} c_{i,\alpha}
-\]
+\] $
 where \( m \) is the fermion mass, \( N \) is the total number of sites, and the sum over \( \alpha \) accounts for the three colors in SU(3).
 
 ### Total Hamiltonian

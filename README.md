@@ -23,12 +23,12 @@ The plaquette terms describes the
 ```math
 H_{\text{plaq}} = \frac{g^2}{2} \sum_{\square} \text{Re} \, \text{Tr} \left( U_{ij} U_{jk} U_{kl} U_{li} \right)
 ```
-
+The plaquette term in the Hamiltonian represents the magnetic interaction between the gauge fields on a lattice, specifically in lattice gauge theory. It encapsulates the non-Abelian flux through a square (plaquette) of the lattice, which corresponds to the interaction between gauge fields in a closed loop.
 
 ### Total Hamiltonian
 The complete Hamiltonian is the sum of the hopping and mass terms:
-\[
+```math
 H = H_{\text{hop}} + H_{\text{mass}}
-\]
+```
 
 This Hamiltonian structure captures both the gauge field's influence on particle motion (via hopping terms) and the individual particle mass for each color on each site.

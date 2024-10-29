@@ -114,9 +114,10 @@ def energy(c: tc.Circuit):
     return K.real(e)
 
 # Adjusted MERA function to handle arbitrary n
-def MERA(inp, n, d=2, layers=3, energy_flag=False):
+# Improved MERA function with more complex entangling blocks for better Hamiltonian representation
+def MERA(inp, n, d=3, layers=4, energy_flag=False):
     """
-    Builds a MERA-inspired ansatz for the fermionic Hamiltonian with improved expressivity.
+    Builds an advanced MERA-inspired ansatz with alternating entanglement patterns and parameter-rich gates.
     - n: Number of qubits
     - d: Depth of each entangling block
     - layers: Number of layers to increase the circuit depth and expressivity
@@ -128,37 +129,42 @@ def MERA(inp, n, d=2, layers=3, energy_flag=False):
     c = tc.Circuit(n)
     idx = 0
 
-    # Apply initial layer of single-qubit rotations
+    # Apply initial layer of single-qubit rotations for each qubit
     for i in range(n):
         c.rx(i, theta=params[idx])
-        c.rz(i, theta=params[idx + 1])
-        c.rx(i, theta=params[idx + 2])
+        c.ry(i, theta=params[idx + 1])
+        c.rz(i, theta=params[idx + 2])
         idx += 3
 
-    # Multi-layer entanglement blocks to capture higher expressivity
+    # Multi-layer entangling blocks with parameter-rich gates
     for layer in range(layers):
         for depth in range(d):
-            for i in range(n - 1):  # Apply CNOT + RY entangling pairs across neighboring qubits
-                c.cnot(i, i + 1)
-                c.ry(i + 1, theta=params[idx])
+            # Nearest-neighbor entanglement with CRY + CNOT + RX blocks
+            for i in range(n - 1):
+                c.cry(i, i + 1, theta=params[idx])
+                idx += 1
+                c.cnot(i + 1, i)
+                c.rx(i, theta=params[idx])
                 idx += 1
 
-            # Parameterized CU3 gate for additional entanglement
-            for i in range(0, n - 1, 2):
-                if i + 1 < n:
-                    c.cu(i, i + 1, theta=params[idx], phi=params[idx + 1])
+            # Next-nearest-neighbor entanglement with CU3 gates
+            for i in range(0, n - 2, 2):
+                if i + 2 < n:
+                    c.cu(i, i + 2, theta=params[idx], phi=params[idx + 1])
                     idx += 3
 
-        # Apply additional single-qubit rotations to all qubits
-        for i in range(n):
-            c.rx(i, theta=params[idx])
-            c.rz(i, theta=params[idx + 1])
-            idx += 2
+            # Single-qubit rotations after entanglement for flexibility
+            for i in range(n):
+                c.rz(i, theta=params[idx])
+                c.rx(i, theta=params[idx + 1])
+                c.ry(i, theta=params[idx + 2])
+                idx += 3
 
     if energy_flag:
         return energy(c)
     else:
         return c, idx
+
 
 # Adjusted QuantumLayer
 class QuantumLayer(tf.keras.layers.Layer):

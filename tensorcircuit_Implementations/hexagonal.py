@@ -29,11 +29,15 @@ from qiskit_nature.second_q.operators import FermionicOp
 random.seed(42)
 np.random.seed(42)
 
-# Define your Hamiltonian parameters and generate the Hamiltonian
+# Define Hamiltonian parameters and generate the Hamiltonian
 g = 2.0
 t = 1.0
 m = 0.5
-lattice_size = 2  # Number of units along each dimension
+lattice_size = 1  # Number of unit cells along one direction
+num_colors = 3
+
+# In a hexagonal lattice, each unit cell has two sublattice sites (A and B)
+num_sites = 2 * lattice_size * lattice_size  # Total number of sites
 
 # SU(3) Gell-Mann matrices (simplified representation)
 su3_generators = [
@@ -45,12 +49,12 @@ su3_generators = [
     np.array([[0, 0, 0], [0, 0, 1], [0, 1, 0]], dtype=complex),
     np.array([[0, 0, 0], [0, 0, -1j], [0, 1j, 0]], dtype=complex),
     np.array(
-        [[1 / np.sqrt(3), 0, 0], [0, 1 / np.sqrt(3), 0], [0, 0, -2 / np.sqrt(3)]],
-        dtype=complex,
+        [[1/np.sqrt(3), 0, 0], [0, 1/np.sqrt(3), 0], [0, 0, -2/np.sqrt(3)]],
+        dtype=complex
     ),
 ]
 
-# Function to generate random SU(3) matrices
+# Initialize gauge field as random SU(3) matrices for each link in the hexagonal lattice
 def random_su3():
     random_combination = sum(random.uniform(0, 1) * G for G in su3_generators)
     exp_matrix = expm(1j * random_combination)
@@ -58,101 +62,69 @@ def random_su3():
     U, _, Vh = np.linalg.svd(exp_matrix)
     return U @ Vh
 
-# Generate sites for Hexagonal lattice (2D lattice)
-# We'll construct a hexagonal lattice using a 2D coordinate system
-# with basis vectors for the hexagonal tiling
-
-def generate_hexagonal_lattice(lattice_size):
-    sites = []
-    for i in range(lattice_size):
-        for j in range(lattice_size):
-            x = i
-            y = j * np.sqrt(3) / 2
-            if i % 2 == 1:
-                y += np.sqrt(3) / 2  # Offset every other row
-            sites.append((x, y))
-    return sites
-
-sites = generate_hexagonal_lattice(lattice_size)
-num_sites = len(sites)
-num_colors = 3  # Number of colors in SU(3)
-
-# Create a mapping from positions to site indices
-site_indices = {pos: idx for idx, pos in enumerate(sites)}
-
-# Define neighbor offsets for Hexagonal lattice
-# Each site in a hexagonal lattice has 3 neighbors
-neighbor_offsets = [
-    (1, 0),   # Right
-    (0, 1),   # Up-Right
-    (-1, 1),  # Up-Left
-    (-1, 0),  # Left
-    (0, -1),  # Down-Left
-    (1, -1),  # Down-Right
-]
-
-# Generate neighbors for each site
-neighbors = {}
-
-for idx, pos in enumerate(sites):
-    neighbors[idx] = []
-    x, y = pos
-    for dx, dy in neighbor_offsets[:3]:  # Only take 3 neighbors to avoid double counting
-        nx = x + dx
-        ny = y + dy * np.sqrt(3) / 2
-        # Adjust for the offset in y
-        if dx == -1 and (int(x) % 2 == 0):
-            ny -= np.sqrt(3) / 2
-        elif dx == 1 and (int(x) % 2 == 1):
-            ny += np.sqrt(3) / 2
-        neighbor_pos = (nx, ny)
-        if neighbor_pos in site_indices:
-            neighbor_idx = site_indices[neighbor_pos]
-            neighbors[idx].append(neighbor_idx)
-
-# Collect unique links (to avoid double counting)
-links = []
-link_indices = {}
-link_counter = 0
-for idx in range(num_sites):
-    for neighbor_idx in neighbors[idx]:
-        if idx < neighbor_idx:
-            links.append((idx, neighbor_idx))
-            link_indices[(idx, neighbor_idx)] = link_counter
-            link_counter += 1
-
-num_links = len(links)
-
-# Initialize gauge field as random SU(3) matrices for each link
-gauge_field = [random_su3() for _ in range(num_links)]
+# Helper function to map lattice coordinates to site index
+def coord_to_index(x, y, sublattice, lattice_size):
+    """
+    x, y: Unit cell coordinates
+    sublattice: 0 for A sublattice, 1 for B sublattice
+    """
+    return (x + y * lattice_size) * 2 + sublattice
 
 # Helper function to flatten site and color indices into a single index
 def flatten_index(site, color, num_colors):
     return site * num_colors + color
 
+# Build neighbor list for the hexagonal lattice
+neighbor_links = []
+gauge_field = []
+
+# Generate the lattice and the neighbor relationships
+for y in range(lattice_size):
+    for x in range(lattice_size):
+        for sublattice in [0, 1]:  # 0: A, 1: B
+            site = coord_to_index(x, y, sublattice, lattice_size)
+            # Define the neighbor sites based on the hexagonal lattice geometry
+            if sublattice == 0:  # Sublattice A
+                # Neighbors of A sites are B sites
+                # Neighbor 1: (+0, +0) unit cell, sublattice B
+                if x < lattice_size and y < lattice_size:
+                    neighbor_site = coord_to_index(x, y, 1, lattice_size)
+                    neighbor_links.append((site, neighbor_site))
+                    gauge_field.append(random_su3())
+                # Neighbor 2: (+1, 0) unit cell, sublattice B
+                if x + 1 < lattice_size:
+                    neighbor_site = coord_to_index(x + 1, y, 1, lattice_size)
+                    neighbor_links.append((site, neighbor_site))
+                    gauge_field.append(random_su3())
+                # Neighbor 3: (0, +1) unit cell, sublattice B
+                if y + 1 < lattice_size:
+                    neighbor_site = coord_to_index(x, y + 1, 1, lattice_size)
+                    neighbor_links.append((site, neighbor_site))
+                    gauge_field.append(random_su3())
+            # No need to define neighbors for sublattice B in this approach
+
 # Hopping terms for SU(3) (fermionic hopping terms)
 fermionic_terms = {}
-for idx1, idx2 in links:
-    link_idx = link_indices[(idx1, idx2)]
-    U = gauge_field[link_idx]
+
+# Generate hopping terms based on neighbor links
+for idx, (site1, site2) in enumerate(neighbor_links):
+    U = gauge_field[idx]  # Corresponding gauge field for this link
     for alpha in range(num_colors):
-        site1_idx = flatten_index(idx1, alpha, num_colors)
-        site2_idx = flatten_index(idx2, alpha, num_colors)
+        idx1 = flatten_index(site1, alpha, num_colors)
+        idx2 = flatten_index(site2, alpha, num_colors)
         coeff = -t * np.real(np.trace(U @ U.conj().T)) / 2
         # Add both the forward and reverse hopping terms to ensure Hermiticity
-        fermionic_terms[f"+_{site1_idx} -_{site2_idx}"] = coeff
-        fermionic_terms[f"+_{site2_idx} -_{site1_idx}"] = coeff
+        fermionic_terms[f"+_{idx1} -_{idx2}"] = coeff
+        fermionic_terms[f"+_{idx2} -_{idx1}"] = coeff
 
 # On-site mass terms (fermionic creation/annihilation for each color)
-for n in range(num_sites):
+for site in range(num_sites):
     for alpha in range(num_colors):
-        idx = flatten_index(n, alpha, num_colors)
+        idx = flatten_index(site, alpha, num_colors)
         fermionic_terms[f"+_{idx} -_{idx}"] = m
 
 # Create the FermionicOp with the dictionary of fermionic hopping and mass terms
-fermionic_hamiltonian = FermionicOp(
-    fermionic_terms, num_spin_orbitals=num_sites * num_colors
-)
+fermionic_hamiltonian = FermionicOp(fermionic_terms, num_spin_orbitals=num_sites * num_colors)
 
 # Map to qubit Hamiltonian
 mapper = JordanWignerMapper()
@@ -167,12 +139,12 @@ def energy(c: tc.Circuit):
     for pauli_string, coeff in hamiltonian_terms:
         operators = []
         for idx, pauli in enumerate(pauli_string):
-            if pauli != "I":
-                if pauli == "X":
+            if pauli != 'I':
+                if pauli == 'X':
                     operators.append((tc.gates.x(), [idx]))
-                elif pauli == "Y":
+                elif pauli == 'Y':
                     operators.append((tc.gates.y(), [idx]))
-                elif pauli == "Z":
+                elif pauli == 'Z':
                     operators.append((tc.gates.z(), [idx]))
                 else:
                     raise ValueError(f"Unknown Pauli operator: {pauli}")
@@ -216,8 +188,8 @@ def MERA(inp, n, d=2, layers=3, energy_flag=False):
             # Parameterized CU3 gate for additional entanglement
             for i in range(0, n - 1, 2):
                 if i + 1 < n:
-                    c.cu(i, i + 1, theta=params[idx], phi=params[idx + 1])
-                    idx += 3
+                    c.cu(i, i + 1, theta=params[idx], phi=params[idx + 1], lbd=0)
+                    idx += 2
 
         # Apply additional single-qubit rotations to all qubits
         for i in range(n):
@@ -253,7 +225,7 @@ def create_NN_MERA(n, d, NN_shape, stddev):
     x = tf.keras.layers.Dropout(0.05)(x)
 
     # Get the number of parameters required for the MERA circuit
-    dummy_params = np.zeros(5000)
+    dummy_params = np.zeros(5000)  # Increased size for larger n
     _, idx = MERA({"params": dummy_params}, n, d, energy_flag=False)
 
     params = tf.keras.layers.Dense(
@@ -297,7 +269,7 @@ def train(n, d, NN_shape, maxiter=10000, lr=0.005, stddev=1.0):
 n = num_sites * num_colors
 d = 2
 NN_shape = 30
-maxiter = 10000
+maxiter = 10000  # Adjusted for computational feasibility
 lr = 0.009
 stddev = 0.1
 
@@ -322,25 +294,22 @@ qiskit_circuit = c.to_qiskit()
 from qiskit.visualization import circuit_drawer
 
 # Save the circuit diagram as a PNG image
-circuit_drawer(qiskit_circuit, output="mpl", filename="quantum_circuit.png")
+circuit_drawer(qiskit_circuit, output='mpl', filename='quantum_circuit.png')
 
 print("Quantum circuit saved as 'quantum_circuit.png'.")
 
 from qiskit.quantum_info import SparsePauliOp
 
-# Step 1: Map Fermionic Hamiltonian to Qubit Operator
+# Map Fermionic Hamiltonian to Qubit Operator
 jw_mapper = JordanWignerMapper()
 qubit_hamiltonian = jw_mapper.map(fermionic_hamiltonian)
 
-# Step 2: Convert Qubit Operator to Sparse Matrix directly
+# Convert Qubit Operator to Sparse Matrix directly
 sparse_matrix = qubit_hamiltonian.to_matrix(sparse=True)  # Directly convert to matrix
 
-# Step 3: Use a classical sparse eigenvalue solver to find the minimum eigenvalue
+# Use a classical sparse eigenvalue solver to find the minimum eigenvalue
 from scipy.sparse.linalg import eigsh
-
-min_eigenvalue, _ = eigsh(
-    sparse_matrix, k=1, which="SA"
-)  # 'SA' finds smallest algebraic eigenvalue
+min_eigenvalue, _ = eigsh(sparse_matrix, k=1, which='SA')  # 'SA' finds smallest algebraic eigenvalue
 
 print("Minimum Eigenvalue:", min_eigenvalue[0])
 

@@ -29,11 +29,17 @@ from qiskit_nature.second_q.operators import FermionicOp
 random.seed(42)
 np.random.seed(42)
 
-# Define your Hamiltonian parameters and generate the Hamiltonian
+# Define Hamiltonian parameters
 g = 2.0
 t = 1.0
 m = 0.5
-lattice_size = 2  # Number of units along each dimension
+lattice_size = 1  # Number of unit cells along one direction
+num_colors = 3
+
+# In a BCC lattice, each unit cell has 2 lattice points
+# Calculate the total number of lattice points
+num_unit_cells = lattice_size ** 3
+num_sites = num_unit_cells * 2  # BCC has two atoms per unit cell
 
 # SU(3) Gell-Mann matrices (simplified representation)
 su3_generators = [
@@ -45,12 +51,12 @@ su3_generators = [
     np.array([[0, 0, 0], [0, 0, 1], [0, 1, 0]], dtype=complex),
     np.array([[0, 0, 0], [0, 0, -1j], [0, 1j, 0]], dtype=complex),
     np.array(
-        [[1 / np.sqrt(3), 0, 0], [0, 1 / np.sqrt(3), 0], [0, 0, -2 / np.sqrt(3)]],
-        dtype=complex,
+        [[1/np.sqrt(3), 0, 0], [0, 1/np.sqrt(3), 0], [0, 0, -2/np.sqrt(3)]],
+        dtype=complex
     ),
 ]
 
-# Function to generate random SU(3) matrices
+# Initialize gauge field as random SU(3) matrices for each link in the BCC lattice
 def random_su3():
     random_combination = sum(random.uniform(0, 1) * G for G in su3_generators)
     exp_matrix = expm(1j * random_combination)
@@ -58,92 +64,99 @@ def random_su3():
     U, _, Vh = np.linalg.svd(exp_matrix)
     return U @ Vh
 
-# Generate sites for BCC lattice
-sites = []
-for i in range(lattice_size):
-    for j in range(lattice_size):
-        for k in range(lattice_size):
-            if (i + j + k) % 2 == 0:
-                sites.append((i, j, k))
-
-num_sites = len(sites)
-num_colors = 3  # Number of colors in SU(3)
-
-# Create a mapping from positions to site indices
-site_indices = {}
-for idx, pos in enumerate(sites):
-    site_indices[pos] = idx
-
-# Define neighbor offsets for BCC lattice
-neighbor_offsets = [
-    (1, 1, 1),
-    (1, 1, -1),
-    (1, -1, 1),
-    (1, -1, -1),
-    (-1, 1, 1),
-    (-1, 1, -1),
-    (-1, -1, 1),
-    (-1, -1, -1),
-]
-
-# Generate neighbors for each site
-neighbors = {}
-
-for idx, pos in enumerate(sites):
-    neighbors[idx] = []
-    x, y, z = pos
-    for dx, dy, dz in neighbor_offsets:
-        nx = (x + dx) % lattice_size
-        ny = (y + dy) % lattice_size
-        nz = (z + dz) % lattice_size
-        neighbor_pos = (nx, ny, nz)
-        if neighbor_pos in site_indices:
-            neighbor_idx = site_indices[neighbor_pos]
-            neighbors[idx].append(neighbor_idx)
-
-# Collect unique links (to avoid double counting)
-links = []
-link_indices = {}
-link_counter = 0
-for idx in range(num_sites):
-    for neighbor_idx in neighbors[idx]:
-        if idx < neighbor_idx:
-            links.append((idx, neighbor_idx))
-            link_indices[(idx, neighbor_idx)] = link_counter
-            link_counter += 1
-
-num_links = len(links)
-
-# Initialize gauge field as random SU(3) matrices for each link
-gauge_field = [random_su3() for _ in range(num_links)]
+# Helper function to map 3D coordinates and basis atom index to site index
+def coord_to_index(x, y, z, basis_atom, lattice_size):
+    """
+    x, y, z: Unit cell coordinates
+    basis_atom: 0 or 1 (BCC has two atoms per unit cell)
+    """
+    return ((x + y * lattice_size + z * lattice_size ** 2) * 2) + basis_atom
 
 # Helper function to flatten site and color indices into a single index
 def flatten_index(site, color, num_colors):
     return site * num_colors + color
 
+# Build neighbor list for the BCC lattice
+neighbor_links = []
+gauge_field = []
+
+# Define lattice vectors for BCC lattice
+lattice_vectors = np.array([
+    [0.5, 0.5, -0.5],
+    [0.5, -0.5, 0.5],
+    [-0.5, 0.5, 0.5],
+])
+
+# Generate the lattice and the neighbor relationships
+for z in range(lattice_size):
+    for y in range(lattice_size):
+        for x in range(lattice_size):
+            for basis_atom in [0, 1]:  # Two atoms per unit cell
+                site = coord_to_index(x, y, z, basis_atom, lattice_size)
+                # Get the position of the current atom
+                if basis_atom == 0:
+                    # Corner atom at (0,0,0) of the unit cell
+                    atom_pos = np.array([x, y, z], dtype=float)
+                else:
+                    # Body-centered atom at (0.5, 0.5, 0.5) relative to unit cell
+                    atom_pos = np.array([x + 0.5, y + 0.5, z + 0.5], dtype=float)
+                # Find nearest neighbors
+                if basis_atom == 0:
+                    # Corner atom: neighbors are the body-centered atoms of the same and adjacent unit cells
+                    neighbor_offsets = [
+                        [0.5, 0.5, 0.5],
+                        [-0.5, 0.5, 0.5],
+                        [0.5, -0.5, 0.5],
+                        [0.5, 0.5, -0.5],
+                    ]
+                else:
+                    # Body-centered atom: neighbors are corner atoms
+                    neighbor_offsets = [
+                        [-0.5, -0.5, -0.5],
+                        [0.5, -0.5, -0.5],
+                        [-0.5, 0.5, -0.5],
+                        [-0.5, -0.5, 0.5],
+                    ]
+                for offset in neighbor_offsets:
+                    neighbor_pos = atom_pos + offset
+                    # Apply periodic boundary conditions
+                    neighbor_pos = neighbor_pos % lattice_size
+                    # Determine neighbor basis atom
+                    neighbor_basis_atom = 1 - basis_atom
+                    neighbor_site = coord_to_index(
+                        int(neighbor_pos[0]),
+                        int(neighbor_pos[1]),
+                        int(neighbor_pos[2]),
+                        neighbor_basis_atom,
+                        lattice_size
+                    )
+                    # Avoid duplicate links
+                    if site < neighbor_site:
+                        neighbor_links.append((site, neighbor_site))
+                        gauge_field.append(random_su3())
+
 # Hopping terms for SU(3) (fermionic hopping terms)
 fermionic_terms = {}
-for idx1, idx2 in links:
-    link_idx = link_indices[(idx1, idx2)]
-    U = gauge_field[link_idx]
+
+# Generate hopping terms based on neighbor links
+for idx, (site1, site2) in enumerate(neighbor_links):
+    U = gauge_field[idx]  # Corresponding gauge field for this link
     for alpha in range(num_colors):
-        site1_idx = flatten_index(idx1, alpha, num_colors)
-        site2_idx = flatten_index(idx2, alpha, num_colors)
+        idx1 = flatten_index(site1, alpha, num_colors)
+        idx2 = flatten_index(site2, alpha, num_colors)
         coeff = -t * np.real(np.trace(U @ U.conj().T)) / 2
         # Add both the forward and reverse hopping terms to ensure Hermiticity
-        fermionic_terms[f"+_{site1_idx} -_{site2_idx}"] = coeff
-        fermionic_terms[f"+_{site2_idx} -_{site1_idx}"] = coeff
+        fermionic_terms[f"+_{idx1} -_{idx2}"] = coeff
+        fermionic_terms[f"+_{idx2} -_{idx1}"] = coeff
 
 # On-site mass terms (fermionic creation/annihilation for each color)
-for n in range(num_sites):
+for site in range(num_sites):
     for alpha in range(num_colors):
-        idx = flatten_index(n, alpha, num_colors)
+        idx = flatten_index(site, alpha, num_colors)
         fermionic_terms[f"+_{idx} -_{idx}"] = m
 
 # Create the FermionicOp with the dictionary of fermionic hopping and mass terms
-fermionic_hamiltonian = FermionicOp(
-    fermionic_terms, num_spin_orbitals=num_sites * num_colors
-)
+fermionic_hamiltonian = FermionicOp(fermionic_terms, num_spin_orbitals=num_sites * num_colors)
 
 # Map to qubit Hamiltonian
 mapper = JordanWignerMapper()
@@ -158,12 +171,12 @@ def energy(c: tc.Circuit):
     for pauli_string, coeff in hamiltonian_terms:
         operators = []
         for idx, pauli in enumerate(pauli_string):
-            if pauli != "I":
-                if pauli == "X":
+            if pauli != 'I':
+                if pauli == 'X':
                     operators.append((tc.gates.x(), [idx]))
-                elif pauli == "Y":
+                elif pauli == 'Y':
                     operators.append((tc.gates.y(), [idx]))
-                elif pauli == "Z":
+                elif pauli == 'Z':
                     operators.append((tc.gates.z(), [idx]))
                 else:
                     raise ValueError(f"Unknown Pauli operator: {pauli}")
@@ -207,8 +220,8 @@ def MERA(inp, n, d=2, layers=3, energy_flag=False):
             # Parameterized CU3 gate for additional entanglement
             for i in range(0, n - 1, 2):
                 if i + 1 < n:
-                    c.cu(i, i + 1, theta=params[idx], phi=params[idx + 1])
-                    idx += 3
+                    c.cu(i, i + 1, theta=params[idx], phi=params[idx + 1], lbd=0)
+                    idx += 2
 
         # Apply additional single-qubit rotations to all qubits
         for i in range(n):
@@ -244,7 +257,7 @@ def create_NN_MERA(n, d, NN_shape, stddev):
     x = tf.keras.layers.Dropout(0.05)(x)
 
     # Get the number of parameters required for the MERA circuit
-    dummy_params = np.zeros(3000)
+    dummy_params = np.zeros(10000)  # Increased size for larger n
     _, idx = MERA({"params": dummy_params}, n, d, energy_flag=False)
 
     params = tf.keras.layers.Dense(
@@ -259,7 +272,7 @@ def create_NN_MERA(n, d, NN_shape, stddev):
     return m
 
 # Adjusted training function with energy recording
-def train(n, d, NN_shape, maxiter=10000, lr=0.005, stddev=1.0):
+def train(n, d, NN_shape, maxiter=1000, lr=0.005, stddev=1.0):
     exp_lr = tf.keras.optimizers.schedules.ExponentialDecay(
         initial_learning_rate=lr, decay_steps=1000, decay_rate=0.7
     )
@@ -278,7 +291,7 @@ def train(n, d, NN_shape, maxiter=10000, lr=0.005, stddev=1.0):
     for i in range(maxiter):
         total_e = train_step()
         energies.append(total_e.numpy())
-        if i % 500 == 0:
+        if i % 100 == 0:
             print("epoch", i, ":", total_e.numpy())
 
     m.save_weights("NN-VQE.weights.h5")
@@ -288,7 +301,7 @@ def train(n, d, NN_shape, maxiter=10000, lr=0.005, stddev=1.0):
 n = num_sites * num_colors
 d = 2
 NN_shape = 30
-maxiter = 10000
+maxiter = 1000  # Adjusted for computational feasibility
 lr = 0.009
 stddev = 0.1
 
@@ -313,25 +326,22 @@ qiskit_circuit = c.to_qiskit()
 from qiskit.visualization import circuit_drawer
 
 # Save the circuit diagram as a PNG image
-circuit_drawer(qiskit_circuit, output="mpl", filename="quantum_circuit.png")
+circuit_drawer(qiskit_circuit, output='mpl', filename='quantum_circuit.png')
 
 print("Quantum circuit saved as 'quantum_circuit.png'.")
 
 from qiskit.quantum_info import SparsePauliOp
 
-# Step 1: Map Fermionic Hamiltonian to Qubit Operator
+# Map Fermionic Hamiltonian to Qubit Operator
 jw_mapper = JordanWignerMapper()
 qubit_hamiltonian = jw_mapper.map(fermionic_hamiltonian)
 
-# Step 2: Convert Qubit Operator to Sparse Matrix directly
+# Convert Qubit Operator to Sparse Matrix directly
 sparse_matrix = qubit_hamiltonian.to_matrix(sparse=True)  # Directly convert to matrix
 
-# Step 3: Use a classical sparse eigenvalue solver to find the minimum eigenvalue
+# Use a classical sparse eigenvalue solver to find the minimum eigenvalue
 from scipy.sparse.linalg import eigsh
-
-min_eigenvalue, _ = eigsh(
-    sparse_matrix, k=1, which="SA"
-)  # 'SA' finds smallest algebraic eigenvalue
+min_eigenvalue, _ = eigsh(sparse_matrix, k=1, which='SA')  # 'SA' finds smallest algebraic eigenvalue
 
 print("Minimum Eigenvalue:", min_eigenvalue[0])
 

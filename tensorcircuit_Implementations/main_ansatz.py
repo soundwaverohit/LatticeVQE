@@ -29,12 +29,12 @@ from qiskit_nature.second_q.operators import FermionicOp
 random.seed(42)
 np.random.seed(42)
 
-# Define your Hamiltonian parameters and generate the Hamiltonian
+# Define Hamiltonian parameters and generate the Hamiltonian
 g = 2.0
 t = 1.0
 m = 0.5
-lattice_size = 2
-num_sites = lattice_size * lattice_size
+lattice_size = 2  # Adjusted lattice size for 2D square lattice
+num_sites = lattice_size ** 2
 num_colors = 3
 
 # SU(3) Gell-Mann matrices (simplified representation)
@@ -46,7 +46,10 @@ su3_generators = [
     np.array([[0, 0, -1j], [0, 0, 0], [1j, 0, 0]], dtype=complex),
     np.array([[0, 0, 0], [0, 0, 1], [0, 1, 0]], dtype=complex),
     np.array([[0, 0, 0], [0, 0, -1j], [0, 1j, 0]], dtype=complex),
-    np.array([[1/np.sqrt(3), 0, 0], [0, 1/np.sqrt(3), 0], [0, 0, -2/np.sqrt(3)]], dtype=complex),
+    np.array(
+        [[1/np.sqrt(3), 0, 0], [0, 1/np.sqrt(3), 0], [0, 0, -2/np.sqrt(3)]],
+        dtype=complex
+    ),
 ]
 
 # Initialize gauge field as random SU(3) matrices for each link in the 2D lattice
@@ -57,7 +60,14 @@ def random_su3():
     U, _, Vh = np.linalg.svd(exp_matrix)
     return U @ Vh
 
-gauge_field = [random_su3() for _ in range(2 * num_sites)]  # For each link
+# Calculate the number of links in a 2D lattice
+num_links = num_sites * 2  # Each site has links in x and y directions
+
+gauge_field = [random_su3() for _ in range(num_links)]  # For each link
+
+# Helper function to map 2D coordinates to site index
+def coord_to_index(x, y, lattice_size):
+    return x + y * lattice_size
 
 # Helper function to flatten site and color indices into a single index
 def flatten_index(site, color, num_colors):
@@ -65,20 +75,37 @@ def flatten_index(site, color, num_colors):
 
 # Hopping terms for SU(3) (fermionic hopping terms)
 fermionic_terms = {}
-for n in range(num_sites - 1):
-    U = gauge_field[n]
-    for alpha in range(num_colors):
-        idx1 = flatten_index(n, alpha, num_colors)
-        idx2 = flatten_index(n + 1, alpha, num_colors)
-        coeff = -t * np.real(np.trace(U @ U.conj().T)) / 2
-        # Add both the forward and reverse hopping terms to ensure Hermiticity
-        fermionic_terms[f"+_{idx1} -_{idx2}"] = coeff
-        fermionic_terms[f"+_{idx2} -_{idx1}"] = coeff
+
+# Generate hopping terms in x and y directions
+for y in range(lattice_size):
+    for x in range(lattice_size):
+        site = coord_to_index(x, y, lattice_size)
+        # Hopping in x-direction
+        if x + 1 < lattice_size:
+            neighbor_site = coord_to_index(x + 1, y, lattice_size)
+            U = gauge_field[site * 2 + 0]  # Link in x-direction
+            for alpha in range(num_colors):
+                idx1 = flatten_index(site, alpha, num_colors)
+                idx2 = flatten_index(neighbor_site, alpha, num_colors)
+                coeff = -t * np.real(np.trace(U @ U.conj().T)) / 2
+                # Add both the forward and reverse hopping terms to ensure Hermiticity
+                fermionic_terms[f"+_{idx1} -_{idx2}"] = coeff
+                fermionic_terms[f"+_{idx2} -_{idx1}"] = coeff
+        # Hopping in y-direction
+        if y + 1 < lattice_size:
+            neighbor_site = coord_to_index(x, y + 1, lattice_size)
+            U = gauge_field[site * 2 + 1]  # Link in y-direction
+            for alpha in range(num_colors):
+                idx1 = flatten_index(site, alpha, num_colors)
+                idx2 = flatten_index(neighbor_site, alpha, num_colors)
+                coeff = -t * np.real(np.trace(U @ U.conj().T)) / 2
+                fermionic_terms[f"+_{idx1} -_{idx2}"] = coeff
+                fermionic_terms[f"+_{idx2} -_{idx1}"] = coeff
 
 # On-site mass terms (fermionic creation/annihilation for each color)
-for n in range(num_sites):
+for site in range(num_sites):
     for alpha in range(num_colors):
-        idx = flatten_index(n, alpha, num_colors)
+        idx = flatten_index(site, alpha, num_colors)
         fermionic_terms[f"+_{idx} -_{idx}"] = m
 
 # Create the FermionicOp with the dictionary of fermionic hopping and mass terms
@@ -116,44 +143,44 @@ def energy(c: tc.Circuit):
 # Adjusted MERA function to handle arbitrary n
 def MERA(inp, n, d=2, layers=3, energy_flag=False):
     """
-    Builds a Hamiltonian Variational Ansatz for the fermionic Hamiltonian.
+    Builds a MERA-inspired ansatz for the fermionic Hamiltonian with improved expressivity.
     - n: Number of qubits
-    - layers: Number of ansatz layers
+    - d: Depth of each entangling block
+    - layers: Number of layers to increase the circuit depth and expressivity
     - energy_flag: If True, returns the energy expectation value; otherwise, returns the circuit.
     """
-    params = K.cast(inp["params"], dtype="float32")
-    params = K.cast(params, "complex128")
-    params = K.reshape(params, [-1])
+    params = K.cast(inp["params"], dtype="float32")  # Ensure real-valued input
+    params = K.cast(params, "complex128")  # Cast to complex
+    params = K.reshape(params, [-1])  # Flatten parameters
     c = tc.Circuit(n)
     idx = 0
 
-    # Initial state preparation (e.g., all zeros)
-    # Optionally, apply a layer of Hadamard gates to create a superposition
+    # Apply initial layer of single-qubit rotations
     for i in range(n):
-        c.h(i)
+        c.rx(i, theta=params[idx])
+        c.rz(i, theta=params[idx + 1])
+        c.rx(i, theta=params[idx + 2])
+        idx += 3
 
-    pauli_map = {'I': 0, 'X': 1, 'Y': 2, 'Z': 3}
-
-    # Build the ansatz layers
+    # Multi-layer entanglement blocks to capture higher expressivity
     for layer in range(layers):
-        # Apply exponentials of all terms in the Hamiltonian
-        for pauli_string, coeff in hamiltonian_terms:
-            # Skip terms with empty Pauli strings
-            if not pauli_string or len(pauli_string.strip()) == 0:
-                continue
-            # Create the list of operators
-            qubits = [i for i, p in enumerate(pauli_string) if p != 'I']
-            paulis = [pauli_map[p] for p in pauli_string if p != 'I']
-            # Ensure qubits and paulis are non-empty and matched
-            if not qubits or not paulis or len(qubits) != len(paulis):
-                continue  # Skip invalid or identity-only terms
-            # Apply the exponential
-            c.exp1(
-                indices=qubits,
-                theta=params[idx] * coeff.real,
-                paulis=paulis
-            )
-            idx += 1
+        for depth in range(d):
+            for i in range(n - 1):  # Apply CNOT + RY entangling pairs across neighboring qubits
+                c.cnot(i, i + 1)
+                c.ry(i + 1, theta=params[idx])
+                idx += 1
+
+            # Parameterized CU3 gate for additional entanglement
+            for i in range(0, n - 1, 2):
+                if i + 1 < n:
+                    c.cu(i, i + 1, theta=params[idx], phi=params[idx + 1], lbd=0)
+                    idx += 2
+
+        # Apply additional single-qubit rotations to all qubits
+        for i in range(n):
+            c.rx(i, theta=params[idx])
+            c.rz(i, theta=params[idx + 1])
+            idx += 2
 
     if energy_flag:
         return energy(c)
@@ -183,7 +210,7 @@ def create_NN_MERA(n, d, NN_shape, stddev):
     x = tf.keras.layers.Dropout(0.05)(x)
 
     # Get the number of parameters required for the MERA circuit
-    dummy_params = np.zeros(3000)
+    dummy_params = np.zeros(5000)  # Increased size for larger n
     _, idx = MERA({"params": dummy_params}, n, d, energy_flag=False)
 
     params = tf.keras.layers.Dense(
@@ -198,7 +225,7 @@ def create_NN_MERA(n, d, NN_shape, stddev):
     return m
 
 # Adjusted training function with energy recording
-def train(n, d, NN_shape, maxiter=10000, lr=0.005, stddev=1.0):
+def train(n, d, NN_shape, maxiter=1000, lr=0.005, stddev=1.0):
     exp_lr = tf.keras.optimizers.schedules.ExponentialDecay(
         initial_learning_rate=lr, decay_steps=1000, decay_rate=0.7
     )
@@ -217,7 +244,7 @@ def train(n, d, NN_shape, maxiter=10000, lr=0.005, stddev=1.0):
     for i in range(maxiter):
         total_e = train_step()
         energies.append(total_e.numpy())
-        if i % 500 == 0:
+        if i % 100 == 0:
             print("epoch", i, ":", total_e.numpy())
 
     m.save_weights("NN-VQE.weights.h5")
@@ -227,7 +254,7 @@ def train(n, d, NN_shape, maxiter=10000, lr=0.005, stddev=1.0):
 n = num_sites * num_colors
 d = 2
 NN_shape = 30
-maxiter = 10000  
+maxiter = 10000  # Adjusted for computational feasibility
 lr = 0.009
 stddev = 0.1
 
@@ -235,10 +262,7 @@ stddev = 0.1
 with tf.device("/cpu:0"):
     energies, m = train(n, d, NN_shape=NN_shape, maxiter=maxiter, lr=lr, stddev=stddev)
 
-
-
 # --- Code to print and save the quantum circuit ---
-
 
 # Extract the parameters from the trained model
 params_model = tf.keras.Model(inputs=m.input, outputs=m.layers[-2].output)
@@ -259,22 +283,20 @@ circuit_drawer(qiskit_circuit, output='mpl', filename='quantum_circuit.png')
 
 print("Quantum circuit saved as 'quantum_circuit.png'.")
 
-
 from qiskit.quantum_info import SparsePauliOp
 
-# Step 1: Map Fermionic Hamiltonian to Qubit Operator
+# Map Fermionic Hamiltonian to Qubit Operator
 jw_mapper = JordanWignerMapper()
 qubit_hamiltonian = jw_mapper.map(fermionic_hamiltonian)
 
-# Step 2: Convert Qubit Operator to Sparse Matrix directly
+# Convert Qubit Operator to Sparse Matrix directly
 sparse_matrix = qubit_hamiltonian.to_matrix(sparse=True)  # Directly convert to matrix
 
-# Step 3: Use a classical sparse eigenvalue solver to find the minimum eigenvalue
+# Use a classical sparse eigenvalue solver to find the minimum eigenvalue
 from scipy.sparse.linalg import eigsh
 min_eigenvalue, _ = eigsh(sparse_matrix, k=1, which='SA')  # 'SA' finds smallest algebraic eigenvalue
 
 print("Minimum Eigenvalue:", min_eigenvalue[0])
-
 
 # Plot the energy convergence
 plt.plot(range(len(energies)), energies)
@@ -282,4 +304,3 @@ plt.xlabel("Epoch")
 plt.ylabel("Energy")
 plt.title("Energy Convergence During Training")
 plt.show()
-

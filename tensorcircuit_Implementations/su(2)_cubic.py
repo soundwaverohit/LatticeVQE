@@ -33,7 +33,7 @@ np.random.seed(42)
 g = 2.0  # Gauge coupling constant
 t = 1.0  # Hopping parameter
 m = 0.5  # Mass
-lattice_size = 2  # Define lattice size for 3D triamond lattice
+lattice_size = 2  # Define lattice size for 3D cubic lattice
 num_sites = lattice_size ** 3  # Total number of lattice sites in 3D
 num_colors = 2  # SU(2) has 2 colors
 
@@ -44,7 +44,7 @@ su2_generators = [
     np.array([[1, 0], [0, -1]], dtype=complex),
 ]
 
-# Initialize gauge field as random SU(2) matrices for each link in the triamond lattice
+# Initialize gauge field as random SU(2) matrices for each link in the cubic lattice
 def random_su2():
     random_combination = sum(random.uniform(0, 1) * G for G in su2_generators)
     exp_matrix = expm(1j * random_combination)
@@ -52,8 +52,9 @@ def random_su2():
     U, _, Vh = np.linalg.svd(exp_matrix)
     return U @ Vh
 
-# Calculate number of links in 3D triamond lattice structure
-num_links = num_sites * 3  # Each site has 3 links in the triamond lattice
+# Calculate number of links in 3D cubic lattice structure
+num_links = num_sites * 6  # Each site has 6 links in the cubic lattice
+
 gauge_field = [random_su2() for _ in range(num_links)]
 
 # Helper function to map 3D coordinates to site index
@@ -78,12 +79,14 @@ for z in range(lattice_size):
                 staggered_phase = (-1) ** ((x + y + z) % 2)  # 3D staggered phase
                 fermionic_terms[f"+_{idx} -_{idx}"] = m * staggered_phase
 
-            # Hopping terms in x, y, and z directions
-            for direction, neighbor_offset in enumerate([(1, 0, 0), (0, 1, 0), (0, 0, 1)]):
+            # Hopping terms in x, y, and z directions (both positive and negative)
+            for direction, neighbor_offset in enumerate([(1, 0, 0), (-1, 0, 0), 
+                                                         (0, 1, 0), (0, -1, 0), 
+                                                         (0, 0, 1), (0, 0, -1)]):
                 nx, ny, nz = x + neighbor_offset[0], y + neighbor_offset[1], z + neighbor_offset[2]
                 if 0 <= nx < lattice_size and 0 <= ny < lattice_size and 0 <= nz < lattice_size:
                     neighbor_site = coord_to_index(nx, ny, nz, lattice_size)
-                    U = gauge_field[site * 3 + direction]  # Link in specified direction
+                    U = gauge_field[site * 6 + direction]  # Link in specified direction
                     for alpha in range(num_colors):
                         idx1 = flatten_index(site, alpha, num_colors)
                         idx2 = flatten_index(neighbor_site, alpha, num_colors)
@@ -228,14 +231,13 @@ def train(n, d, NN_shape, maxiter=1000, lr=0.005, stddev=1.0):
 n = num_sites * num_colors
 d = 2
 NN_shape = 30
-maxiter = 1000
+maxiter = 10000
 lr = 0.009
 stddev = 0.1
 
 # Train and plot
 with tf.device("/cpu:0"):
     energies, m = train(n, d, NN_shape=NN_shape, maxiter=maxiter, lr=lr, stddev=stddev)
-
 
 # Extract the parameters from the trained model
 params_model = tf.keras.Model(inputs=m.input, outputs=m.layers[-2].output)

@@ -6,6 +6,11 @@ from functools import partial
 import random
 from scipy.linalg import expm
 import matplotlib.pyplot as plt
+from qiskit.quantum_info import SparsePauliOp
+from qiskit_nature.second_q.mappers import JordanWignerMapper
+from qiskit_nature.second_q.operators import FermionicOp
+from qiskit.visualization import circuit_drawer
+from scipy.sparse.linalg import eigsh
 
 # Set up TensorCircuit with custom contractor
 optc = cotengra.ReusableHyperOptimizer(
@@ -21,10 +26,6 @@ tc.set_contractor("custom", optimizer=optc, preprocessing=True)
 K = tc.set_backend("tensorflow")
 tc.set_dtype("complex128")
 
-# Import Qiskit and related libraries
-from qiskit_nature.second_q.mappers import JordanWignerMapper
-from qiskit_nature.second_q.operators import FermionicOp
-
 # Fix the random seed for reproducibility
 random.seed(42)
 np.random.seed(42)
@@ -33,7 +34,7 @@ np.random.seed(42)
 g = 2.0  # Gauge coupling constant
 t = 1.0  # Hopping parameter
 m = 0.5  # Mass
-lattice_size = 2  # Define lattice size for 3D triamond lattice
+lattice_size = 1  # Define lattice size for 3D triamond lattice
 num_sites = lattice_size ** 3  # Total number of lattice sites in 3D
 num_colors = 2  # SU(2) has 2 colors
 
@@ -44,64 +45,79 @@ su2_generators = [
     np.array([[1, 0], [0, -1]], dtype=complex),
 ]
 
-# Initialize gauge field as random SU(2) matrices for each link in the triamond lattice
-def random_su2():
-    random_combination = sum(random.uniform(0, 1) * G for G in su2_generators)
-    exp_matrix = expm(1j * random_combination)
-    # Normalize to ensure unitary
-    U, _, Vh = np.linalg.svd(exp_matrix)
-    return U @ Vh
+# Initialize gauge field as random SU(2) matrices for each unique link
+num_links = int(num_sites * 1.5)  # Approximate number of unique links in the triamond lattice
+gauge_field = [expm(1j * sum(random.uniform(0, 1) * G for G in su2_generators)) for _ in range(num_links)]
 
-# Calculate number of links in 3D triamond lattice structure
-num_links = num_sites * 3  # Each site has 3 links in the triamond lattice
-gauge_field = [random_su2() for _ in range(num_links)]
-
-# Helper function to map 3D coordinates to site index
+# Helper functions
 def coord_to_index(x, y, z, lattice_size):
     return x + y * lattice_size + z * lattice_size**2
 
-# Helper function to flatten site and color indices into a single index
 def flatten_index(site, color, num_colors):
     return site * num_colors + color
 
-# Hopping terms for SU(2) staggered fermions (fermionic hopping terms)
+# Initialize the fermionic Hamiltonian terms
 fermionic_terms = {}
-
-# Generate hopping terms in x, y, and z directions
+link_count = 0
 for z in range(lattice_size):
     for y in range(lattice_size):
         for x in range(lattice_size):
             site = coord_to_index(x, y, z, lattice_size)
-            # Staggered mass term with alternating phase in 3D
             for alpha in range(num_colors):
                 idx = flatten_index(site, alpha, num_colors)
-                staggered_phase = (-1) ** ((x + y + z) % 2)  # 3D staggered phase
+                staggered_phase = (-1) ** ((x + y + z) % 2)
                 fermionic_terms[f"+_{idx} -_{idx}"] = m * staggered_phase
 
-            # Hopping terms in x, y, and z directions
             for direction, neighbor_offset in enumerate([(1, 0, 0), (0, 1, 0), (0, 0, 1)]):
                 nx, ny, nz = x + neighbor_offset[0], y + neighbor_offset[1], z + neighbor_offset[2]
                 if 0 <= nx < lattice_size and 0 <= ny < lattice_size and 0 <= nz < lattice_size:
                     neighbor_site = coord_to_index(nx, ny, nz, lattice_size)
-                    U = gauge_field[site * 3 + direction]  # Link in specified direction
+                    U = gauge_field[link_count]
+                    link_count += 1
                     for alpha in range(num_colors):
                         idx1 = flatten_index(site, alpha, num_colors)
                         idx2 = flatten_index(neighbor_site, alpha, num_colors)
-                        coeff = -t * np.real(np.trace(U @ U.conj().T)) / 2
-                        # Ensure Hermiticity by adding both directions
+                        coeff = -t * np.real(np.trace(U)) / 2
                         fermionic_terms[f"+_{idx1} -_{idx2}"] = coeff
                         fermionic_terms[f"+_{idx2} -_{idx1}"] = coeff
 
-# Create FermionicOp with the dictionary of fermionic hopping and mass terms
+# Fermionic Hamiltonian from fermionic terms
 fermionic_hamiltonian = FermionicOp(fermionic_terms, num_spin_orbitals=num_sites * num_colors)
-
-# Map to qubit Hamiltonian
 mapper = JordanWignerMapper()
-qubit_hamiltonian = mapper.map(fermionic_hamiltonian)
+fermionic_qubit_hamiltonian = mapper.map(fermionic_hamiltonian)
 
-print("Number of qubits are: ", qubit_hamiltonian.num_qubits)
+# Total qubits in the combined system
+total_qubits = num_sites * num_colors + num_links
+
+# Expand fermionic terms to the full qubit space
+fermionic_qubit_hamiltonian = SparsePauliOp.from_list(
+    [(pauli + "I" * num_links, coeff) for pauli, coeff in fermionic_qubit_hamiltonian.to_list()]
+)
+
+# Create and pad gauge field Hamiltonian
+gauge_field_ops = []
+for i in range(num_links):
+    pauli_str = "I" * (num_sites * num_colors + i) + "Z" + "I" * (num_links - i - 1)
+    gauge_field_ops.append(SparsePauliOp.from_list([(pauli_str, g)]))
+
+# Sum the gauge field operators into a single SparsePauliOp
+gauge_field_hamiltonian = sum(gauge_field_ops)
+
+gauge_qubit_hamiltonian = SparsePauliOp.from_list(
+    [(pauli + "I" * num_links, coeff) for pauli, coeff in gauge_field_hamiltonian.to_list()]
+)
+
+
+# Combine fermionic and gauge field Hamiltonians
+total_hamiltonian = fermionic_qubit_hamiltonian + gauge_field_hamiltonian
+
+
+print("Fermionic qubits: ",fermionic_qubit_hamiltonian.num_qubits)
+print("Gauge qubits: ", gauge_qubit_hamiltonian.num_qubits)
+print("Number of qubits in total Hamiltonian:", total_hamiltonian.num_qubits)
+
 # Extract Hamiltonian terms
-hamiltonian_terms = qubit_hamiltonian.to_list()
+hamiltonian_terms = total_hamiltonian.to_list()
 
 # Define the energy function
 def energy(c: tc.Circuit):
@@ -225,7 +241,7 @@ def train(n, d, NN_shape, maxiter=1000, lr=0.005, stddev=1.0):
     return energies, m
 
 # Set number of qubits
-n = num_sites * num_colors
+n = total_qubits
 d = 2
 NN_shape = 30
 maxiter = 1000
@@ -235,26 +251,6 @@ stddev = 0.1
 # Train and plot
 with tf.device("/cpu:0"):
     energies, m = train(n, d, NN_shape=NN_shape, maxiter=maxiter, lr=lr, stddev=stddev)
-
-
-# Extract the parameters from the trained model
-params_model = tf.keras.Model(inputs=m.input, outputs=m.layers[-2].output)
-input_val = np.array([[0.0]])
-params = params_model.predict(input_val)[0]
-
-# Build the circuit with the trained parameters
-c, idx = MERA({"params": params}, n, d, energy_flag=False)
-
-# Convert the TensorCircuit circuit to a Qiskit QuantumCircuit
-qiskit_circuit = c.to_qiskit()
-
-# Draw and save the circuit using Qiskit
-from qiskit.visualization import circuit_drawer
-
-# Save the circuit diagram as a PNG image
-circuit_drawer(qiskit_circuit, output='mpl', filename='quantum_circuit.png')
-
-print("Quantum circuit saved as 'quantum_circuit.png'.")
 
 from qiskit.quantum_info import SparsePauliOp
 
@@ -270,6 +266,8 @@ from scipy.sparse.linalg import eigsh
 min_eigenvalue, _ = eigsh(sparse_matrix, k=1, which='SA')  # 'SA' finds smallest algebraic eigenvalue
 
 print("Minimum Eigenvalue:", min_eigenvalue[0])
+
+
 
 # Plot the energy convergence
 plt.plot(range(len(energies)), energies)

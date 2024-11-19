@@ -328,8 +328,8 @@ for step in range(num_steps):
         expval = expectation_pauli_string(circuit, pauli_string)
         sigma_expectations.append(expval)
 
-    print(f"Sigma expectations:")
-    print(sigma_expectations)
+    #print(f"Sigma expectations:")
+    #print(sigma_expectations)
 
     # Compute b_i
     for i, (pauli_i, qubit_i) in enumerate(basis_operators):
@@ -347,8 +347,8 @@ for step in range(num_steps):
         b_i = -H_sigma_i + E * sigma_expectations[i]
         b[i] = b_i
 
-    print(f"b vector:")
-    print(b)
+    #print(f"b vector:")
+    #print(b)
 
     # Compute S_ij
     for i, (pauli_i, qubit_i) in enumerate(basis_operators):
@@ -364,8 +364,8 @@ for step in range(num_steps):
             S_ij = expval - sigma_expectations[i] * sigma_expectations[j]
             S[i, j] = S_ij
 
-    print(f"S matrix:")
-    print(S)
+    #print(f"S matrix:")
+    #print(S)
 
     # Solve S x = b
     S_real = np.real(S)
@@ -384,8 +384,8 @@ for step in range(num_steps):
             print("Singular matrix encountered at step", step)
             break
 
-    print(f"x values:")
-    print(x)
+    #print(f"x values:")
+    #print(x)
 
     # Update the state: Apply U(δτ) = exp(-i δτ ∑ x_i σ_i)
     # For small δτ, we can approximate U(δτ) ≈ ∏ exp(-i δτ x_i σ_i)

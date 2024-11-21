@@ -34,7 +34,7 @@ np.random.seed(42)
 g = 2.0  # Gauge coupling constant
 t = 1.0  # Hopping parameter
 m = 0.5  # Mass
-num_colors = 1  # SU(2) has 2 colors
+num_colors = 1  # SU(2) has 2 colors, but for simplicity we use 1 color here
 a = 1.0  # Lattice constant
 
 # SU(2) Pauli matrices (generators)
@@ -94,7 +94,8 @@ for site_idx, neighbors in neighbor_list.items():
         link = tuple(sorted([site_idx, neighbor_idx]))
         if link not in link_indices:
             link_indices.append(link)
-            U = expm(1j * sum(random.uniform(0, 1) * G for G in su2_generators))
+            # Initialize gauge fields as identity for simplicity
+            U = np.eye(2, dtype=complex)
             gauge_field[link] = U
 
 num_links = len(link_indices)
@@ -302,8 +303,8 @@ def compute_energy(c: tc.Circuit):
     return e  # Return complex128
 
 # QITE parameters
-delta_tau = 0.001  # Imaginary time step
-num_steps = 10  # Number of QITE steps (reduced for debugging)
+delta_tau = 10  # Imaginary time step
+num_steps = 100  # Number of QITE steps
 
 energies = []
 
@@ -311,14 +312,15 @@ energies = []
 for step in range(num_steps):
     print(f"\n--- Step {step} ---")
     # Compute current energy E = ⟨ψ| H |ψ⟩
-    E = compute_energy(circuit)
-    energies.append(E.numpy().real)
-    print(f"Energy E: {E.numpy().real}")
+    E_complex = compute_energy(circuit)
+    E = np.real(E_complex)
+    energies.append(E)
+    print(f"Energy E: {E}")
 
     # Prepare b vector and S matrix
     N = len(basis_operators)
-    b = np.zeros(N, dtype=np.complex128)
-    S = np.zeros((N, N), dtype=np.complex128)
+    b = np.zeros(N, dtype=np.float64)
+    S = np.zeros((N, N), dtype=np.float64)
 
     # Compute ⟨ψ| σ_i |ψ⟩ for all σ_i
     sigma_expectations = []
@@ -326,10 +328,7 @@ for step in range(num_steps):
         pauli_string = ['I'] * total_qubits
         pauli_string[qubit] = pauli
         expval = expectation_pauli_string(circuit, pauli_string)
-        sigma_expectations.append(expval)
-
-    #print(f"Sigma expectations:")
-    #print(sigma_expectations)
+        sigma_expectations.append(np.real(expval))
 
     # Compute b_i
     for i, (pauli_i, qubit_i) in enumerate(basis_operators):
@@ -343,12 +342,8 @@ for step in range(num_steps):
             expval = expectation_pauli_string(circuit, new_pauli)
             H_sigma_i += coeff_H * phase * expval
 
-        # Ensure E is complex128
-        b_i = -H_sigma_i + E * sigma_expectations[i]
+        b_i = -np.real(H_sigma_i) + E * sigma_expectations[i]
         b[i] = b_i
-
-    #print(f"b vector:")
-    #print(b)
 
     # Compute S_ij
     for i, (pauli_i, qubit_i) in enumerate(basis_operators):
@@ -361,31 +356,15 @@ for step in range(num_steps):
             # Multiply σ_i and σ_j
             new_pauli, phase = multiply_pauli_strings(''.join(pauli_string_i), ''.join(pauli_string_j))
             expval = expectation_pauli_string(circuit, new_pauli)
-            S_ij = expval - sigma_expectations[i] * sigma_expectations[j]
+            S_ij = np.real(phase * expval) - sigma_expectations[i] * sigma_expectations[j]
             S[i, j] = S_ij
 
-    #print(f"S matrix:")
-    #print(S)
-
     # Solve S x = b
-    S_real = np.real(S)
-    b_real = np.real(b)
-    cond_number = np.linalg.cond(S_real)
-    #print(f"Condition number of S at step {step}: {cond_number}")
-
-    # If condition number is too high, regularize or use pseudoinverse
-    if cond_number > 1e12:
-        print("S matrix is ill-conditioned, using pseudoinverse")
-        x = np.dot(np.linalg.pinv(S_real), b_real)
-    else:
-        try:
-            x = np.linalg.solve(S_real + 1e-6 * np.eye(N), b_real)
-        except np.linalg.LinAlgError:
-            print("Singular matrix encountered at step", step)
-            break
-
-    #print(f"x values:")
-    #print(x)
+    try:
+        x = np.linalg.solve(S + 1e-6 * np.eye(N), b)
+    except np.linalg.LinAlgError:
+        print("Singular matrix encountered at step", step)
+        break
 
     # Update the state: Apply U(δτ) = exp(-i δτ ∑ x_i σ_i)
     # For small δτ, we can approximate U(δτ) ≈ ∏ exp(-i δτ x_i σ_i)
@@ -400,7 +379,7 @@ for step in range(num_steps):
 
 # After QITE, compute the final energy
 final_energy = compute_energy(circuit)
-print("Final Energy from QITE:", final_energy.numpy().real)
+print("Final Energy from QITE:", np.real(final_energy))
 
 # Use a classical sparse eigenvalue solver to find the minimum eigenvalue
 sparse_matrix = total_hamiltonian.to_matrix(sparse=True)

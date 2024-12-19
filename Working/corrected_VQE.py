@@ -8,9 +8,15 @@ import random
 from scipy.linalg import expm
 import matplotlib.pyplot as plt
 from qiskit.quantum_info import SparsePauliOp
-from qiskit_nature.second_q.mappers import JordanWignerMapper
+from scipy.sparse.linalg import eigsh
+import warnings
 from qiskit_nature.second_q.operators import FermionicOp
 from scipy.sparse.linalg import eigsh
+from qiskit_nature.second_q.mappers import JordanWignerMapper
+
+
+# Suppress specific warnings (optional)
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # Set up TensorCircuit with custom contractor
 optc = cotengra.ReusableHyperOptimizer(
@@ -33,9 +39,9 @@ np.random.seed(42)
 # Define Hamiltonian parameters
 g = 2.0  # Gauge coupling constant
 t = 1.0  # Hopping parameter
-m = 0.5  # Mass
+m = 0.5  # Mass term
 lattice_size = 2  # Define lattice size for 3D triamond lattice
-num_colors = 2  # Using one color (one fermionic mode per site)
+num_colors = 2    # Two color indices: a and b
 
 # SU(2) generators (Pauli matrices divided by 2)
 su2_generators = [
@@ -48,6 +54,7 @@ su2_generators = [
 def generate_triamond_lattice(lattice_size):
     """
     Generate site positions and neighbor list for the triamond lattice.
+    Each site has exactly three neighbors.
     """
     site_positions = []
     neighbor_list = {}
@@ -64,7 +71,6 @@ def generate_triamond_lattice(lattice_size):
                     (1, 0, 0),
                     (0, 1, 0),
                     (0, 0, 1),
-                    # Additional offsets to ensure three neighbors per site
                     (-1, 1, 0),
                     (0, -1, 1),
                     (1, 0, -1),
@@ -117,56 +123,67 @@ for site in site_positions:
 num_links = len(link_indices)
 
 # Total number of fermionic modes
-num_fermionic_modes = num_sites  # Since num_colors = 1
+num_fermionic_modes = num_sites 
 
 # Gauge field Hilbert space per link
 qubits_per_link = 1
 num_gauge_qubits = num_links * qubits_per_link
 
 # Total qubits in the combined system
-total_qubits = num_fermionic_modes + num_gauge_qubits
+total_qubits = num_fermionic_modes + num_gauge_qubits  # 20 qubits
 
 # Initialize the fermionic Hamiltonian terms
 fermionic_terms = {}
-site_masses = {}
 for site in site_positions:
     # Mass term with staggered phase
     x, y, z = site
     staggered_phase = (-1) ** ((x + y + z) % 2)
     mass = m * staggered_phase
     site_idx = site_to_index[site]
-    site_masses[site_idx] = mass
-    idx_flat = flatten_index(site, lattice_size)
-    fermionic_terms[f"+_{idx_flat} -_{idx_flat}"] = mass
+    fermionic_terms[f"+_{site_idx} -_{site_idx}"] = mass
 
-# Hopping terms with full SU(2) gauge field matrices
+# Hopping terms with SU(2) gauge field matrices
 for link_idx, link in enumerate(link_indices):
     site_i_idx, site_j_idx = link
     U_ij = gauge_field[link]
     site_i = site_positions[site_i_idx]
     site_j = site_positions[site_j_idx]
-    idx_i = flatten_index(site_i, lattice_size)
-    idx_j = flatten_index(site_j, lattice_size)
-    # Hopping term with gauge field U_ij
-    term1 = f"+_{idx_i} -_{idx_j}"
-    coeff1 = -t * U_ij[0, 0]  # Since num_colors = 1
-    fermionic_terms[term1] = fermionic_terms.get(term1, 0) + coeff1
-    # Hermitian conjugate term
-    term2 = f"+_{idx_j} -_{idx_i}"
-    coeff2 = -t * np.conj(U_ij[0, 0])
-    fermionic_terms[term2] = fermionic_terms.get(term2, 0) + coeff2
+    idx_i = site_to_index[site_i]
+    idx_j = site_to_index[site_j]
+    
+    # Hopping term for color a
+    term_a = f"+_{idx_i} -_{idx_j}"
+    coeff_a = -t * U_ij[0, 0]  # Assuming color a corresponds to U_ij[0,0]
+    fermionic_terms[term_a] = fermionic_terms.get(term_a, 0) + coeff_a
+    
+    # Hopping term for color b
+    term_b = f"+_{idx_i} -_{idx_j}"
+    coeff_b = -t * U_ij[1, 1]  # Assuming color b corresponds to U_ij[1,1]
+    fermionic_terms[term_b] = fermionic_terms.get(term_b, 0) + coeff_b
+    
+    # Hermitian conjugate terms
+    herm_term_a = f"+_{idx_j} -_{idx_i}"
+    herm_coeff_a = -t * np.conj(U_ij[0, 0])
+    fermionic_terms[herm_term_a] = fermionic_terms.get(herm_term_a, 0) + herm_coeff_a
+    
+    herm_term_b = f"+_{idx_j} -_{idx_i}"
+    herm_coeff_b = -t * np.conj(U_ij[1, 1])
+    fermionic_terms[herm_term_b] = fermionic_terms.get(herm_term_b, 0) + herm_coeff_b
 
 # Create Fermionic Hamiltonian
 fermionic_hamiltonian = FermionicOp(
     fermionic_terms, num_spin_orbitals=num_fermionic_modes
 )
+
+# Map fermionic operators to qubit operators using Jordan-Wigner
 mapper = JordanWignerMapper()
 fermionic_qubit_hamiltonian = mapper.map(fermionic_hamiltonian)
 
 # Pad fermionic operators to include gauge qubits
-fermionic_qubit_hamiltonian = fermionic_qubit_hamiltonian.tensor(
-    SparsePauliOp.from_list([('I' * num_gauge_qubits, 1)])
-)
+# The fermionic_qubit_hamiltonian acts on num_fermionic_modes qubits
+# We need to pad it with identity operators for the gauge qubits
+identity_gauge = SparsePauliOp.from_list([('I' * num_gauge_qubits, 1)])
+fermionic_qubit_hamiltonian = fermionic_qubit_hamiltonian.tensor(identity_gauge)
 
 # Function to map SU(2) matrices to qubit operators acting on 1 qubit
 def su2_to_qubit_operator(U):
@@ -214,15 +231,20 @@ for idx, link in enumerate(link_indices):
 # Combine fermionic and gauge field Hamiltonians
 total_hamiltonian = fermionic_qubit_hamiltonian + gauge_field_hamiltonian
 
+# Extract Hamiltonian terms
+hamiltonian_terms = total_hamiltonian.to_list()
+
 print("Number of sites:", num_sites)
 print("Number of links:", num_links)
 print("Total number of qubits:", total_qubits)
 
-# Extract Hamiltonian terms
-hamiltonian_terms = total_hamiltonian.to_list()
-
-# Define the energy function
+################
+# VQE with QMERA #
+################
 def energy(c: tc.Circuit):
+    """
+    Compute the expectation value of the Hamiltonian given a quantum circuit.
+    """
     e = 0.0 + 0.0j
     for pauli_string, coeff in hamiltonian_terms:
         operators = []
@@ -243,8 +265,10 @@ def energy(c: tc.Circuit):
             e += coeff
     return tf.math.real(e)
 
-# Adjusted MERA function to handle arbitrary n
 def MERA(inp, n, d=2, layers=3, energy_flag=False):
+    """
+    Quantum Multi-scale Entanglement Renormalization Ansatz (QMERA) Circuit.
+    """
     params = K.cast(inp["params"], dtype="float32")
     params = K.cast(params, "complex128")
     params = K.reshape(params, [-1])
@@ -283,6 +307,9 @@ def MERA(inp, n, d=2, layers=3, energy_flag=False):
 
 # QuantumLayer for Keras
 class QuantumLayer(tf.keras.layers.Layer):
+    """
+    Custom TensorFlow layer integrating the quantum circuit into the Keras model.
+    """
     def __init__(self, circuit_fn, **kwargs):
         super().__init__(**kwargs)
         self.circuit_fn = circuit_fn
@@ -295,6 +322,9 @@ class QuantumLayer(tf.keras.layers.Layer):
 
 # Create neural network
 def create_NN_MERA(n, d, NN_shape, stddev):
+    """
+    Constructs the neural network architecture incorporating the QMERA ansatz.
+    """
     input = tf.keras.layers.Input(shape=[1])
     x = tf.keras.layers.Dense(
         units=NN_shape,
@@ -303,15 +333,18 @@ def create_NN_MERA(n, d, NN_shape, stddev):
     )(input)
     x = tf.keras.layers.Dropout(0.05)(x)
 
+    # Determine the number of parameters required by MERA
     dummy_params = np.zeros(5000)
     _, idx = MERA({"params": dummy_params}, n, d, energy_flag=False)
 
+    # Output layer to generate parameters for MERA
     params = tf.keras.layers.Dense(
         units=idx,
         kernel_initializer=tf.keras.initializers.RandomNormal(stddev=stddev),
         activation="sigmoid",
     )(x)
 
+    # Scale parameters to control rotation angles
     qlayer = QuantumLayer(partial(MERA, n=n, d=d, energy_flag=True))
     output = qlayer({"params": 6.3 * params})
     m = tf.keras.Model(inputs=input, outputs=output)
@@ -319,6 +352,9 @@ def create_NN_MERA(n, d, NN_shape, stddev):
 
 # Training function
 def train(n, d, NN_shape, maxiter=1000, lr=0.005, stddev=1.0):
+    """
+    Optimizes the QMERA ansatz parameters to minimize the energy expectation value.
+    """
     exp_lr = tf.keras.optimizers.schedules.ExponentialDecay(
         initial_learning_rate=lr, decay_steps=1000, decay_rate=0.7
     )
@@ -338,18 +374,18 @@ def train(n, d, NN_shape, maxiter=1000, lr=0.005, stddev=1.0):
         total_e = train_step()
         energies.append(total_e.numpy())
         if i % 100 == 0:
-            print("epoch", i, ":", total_e.numpy())
+            print("Epoch", i, ":", total_e.numpy())
 
     m.save_weights("NN-VQE.weights.h5")
     return energies, m
 
 # Set number of qubits
-n = total_qubits
-d = 2
-NN_shape = 50
-maxiter = 2500
-lr = 0.005
-stddev = 0.1
+n = total_qubits  # 20 qubits (8 site qubits + 12 gauge qubits)
+d = 2              # Depth parameter for MERA
+NN_shape = 50      # Neural network hidden layer size
+maxiter = 1000     # Number of training iterations
+lr = 0.005         # Learning rate
+stddev = 0.1       # Standard deviation for weight initialization
 
 # Train and plot
 with tf.device("/cpu:0"):
